@@ -1,0 +1,15 @@
+# Ignorer les répertoires
+Raw_data/
+venv/
+.ipynb_checkpoints
+
+# Ignorer tous les fichiers d'extension
+*.ipynb
+*.csv
+
+# Exemple d'autres fichiers ou répertoires communs à ignorer
+node_modules/
+.DS_Store
+.env
+dist/
+build/
