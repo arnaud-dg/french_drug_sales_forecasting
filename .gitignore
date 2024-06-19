@@ -6,6 +6,7 @@ venv/
 # Ignorer tous les fichiers d'extension
 *.ipynb
 *.csv
+*.pptx
 
 # Exemple d'autres fichiers ou répertoires communs à ignorer
 node_modules/
@@ -13,3 +14,4 @@ node_modules/
 .env
 dist/
 build/
+credentials.py

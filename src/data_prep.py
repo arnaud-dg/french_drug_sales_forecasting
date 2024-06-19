@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 # Define the directory containing xls files from Medic'AM
-directory = 'Raw_data/'
+directory = 'C:/Users/Arnaud/french_drug_sales_forecasting/Raw_data/'
 
 # Define an empty list to collect dataframes
 liste_dataframes = []
@@ -72,7 +72,7 @@ df_final = df_final[df_final['Year'] >= 2021]
 # Get product properties from df_final
 df_product = df_final[['CIP13', 'Designation', 'Product', 'EphMRA', 'Class', 'ATC_Code', 'ATC_Class', 'ATC_Code2', 'ATC_Class2']]
 df_product = df_product.drop_duplicates(subset=['CIP13'])
-df_final = df_final[['CIP13', 'Variable', 'Value', 'Month', 'Year', 'Date']]
+df_final = df_final[['CIP13', 'Variable', 'Value', 'Market_type', 'Month', 'Year', 'Date']]
 
 # Save the 2 dataframes
 df_final.to_csv('French_pharmaceutical_sales.csv', sep=";", index=False)
