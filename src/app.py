@@ -5,8 +5,7 @@ from io import BytesIO
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objs as go
-
-from credentials import aws_access_key_id, aws_secret_access_key
+import requests
 
 # Layout of the main page
 st.set_page_config(layout="wide")
@@ -18,79 +17,92 @@ color_map = {
     'Forecast_area': '#BDB6DE' 
 }
 
-# Initializing s3 client
-s3 = boto3.client('s3',
-                  aws_access_key_id=aws_access_key_id,
-                  aws_secret_access_key=aws_secret_access_key,
-                  region_name='us-east-1'
-                  )
+# Import the csv files from S3 bucket
+df_product = pd.read_csv("https://french-drug-sales-forecasting.s3.amazonaws.com/data/FRENCH_DRUG_SALES_F.csv", sep=",")
+df_atc1 = pd.read_csv("https://french-drug-sales-forecasting.s3.amazonaws.com/data/FRENCH_DRUG_SALES_F.csv", sep=",")
+df_atc2 = pd.read_csv("https://french-drug-sales-forecasting.s3.amazonaws.com/data/FRENCH_DRUG_SALES_F.csv", sep=",")
+# df_product['MARKET'] = df_product['MARKET'].str.replace("Community", "Community pharmacy")
+# df_atc1['MARKET'] = df_atc1['MARKET'].str.replace("Community", "Community pharmacy")
+df_atc2['MARKET'] = df_atc2['MARKET'].str.replace("Community", "Community pharmacy")
 
-def load_data_from_s3(bucket_name, file_key):
-    """Get a .csv file from a S3 bucket and transform it as a dataframe"""
-    response = s3.get_object(Bucket=bucket_name, Key=file_key)
-    content = response['Body'].read()
-    df = pd.read_csv(BytesIO(content))
-    return df
+# Add the Both category to the dataframe
 
-# Import the csv files from S3 bucket - CIP product table
-df_product = load_data_from_s3("french-drug-sales-forecasting", "data/FRENCH_DRUG_SALES_F.csv")
-
-# Extract the list of unique product
-product_list = list(df_product['ATC_Class'].unique())
-product_list.sort()
-product_list = product_list[:5] + ["METFORMINE", "VITAMINES"]
-family_list = list(df_product['ATC_Class2'].unique())
-family_list.sort()
-family_list = family_list[:5]
+# Extract the list of unique items for the dropdown list
+# product_list = list(df_product['PRODUCT'].unique())
+# product_list.sort()
+# atc1_list = list(df_product['ATC1_DESCRIPTION'].unique())
+# atc1_list.sort()
+atc2_list = list(df_product['ATC2_DESCRIPTION'].unique())
+atc2_list.sort()
 
 # Interface Streamlit
-st.title("📈 Drugs Sales Forecasting - French Market :flag-fr:")
+st.title("📈 Drugs Sales Forecasting - French Market")
 
 st.sidebar.write("""This web application, made with Streamlit, is a personal project I undertook to practice with Time-series Forecasting. 
                  The technical stack used implies AWS, Snowflake, SQL, and Python. 
                  The aim of this application is to provide a trend analysis and a forecast of the drug consumption in France.
                  In order to reduce computation costs, a sample of 10 CIP Code only is available.""")
 
-tab1, tab2, tab3 = st.tabs(["ATC Classification - Level 1", "ATC Classification - Level", "Forecast by CIP13 code"])
+tab1, tab2, tab3 = st.tabs(["Forecast by ATC Classif. - Level 1", "Forecast by ATC Classif. - Leve 2", "Forecast by CIP13 code"])
 with tab1:
     st.header("An owl")
     st.image("https://static.streamlit.io/examples/owl.jpg", width=200)
 
 with tab2:
+    # Selection panels
     col1, col2 = st.columns(2)
     with col1:
-        selection = st.selectbox('Product to forecast:', product_list, key=5)
-        chart_title = "Sales Forecasting" + " - " + selection   
+        selection = st.selectbox('Products to forecast:', atc2_list, key=5)  
     with col2:
-        scope = st.selectbox('Forecasting scope:', ['Both','Community pharmacy', 'Hospital'], key=6)
-    
-    with col1:
-        prediction_timeframe = st.slider('Forecasting horizon (in months):', min_value=3, value=6, max_value=12, step=1, key=7)
-    with col2:
-        confidence_interval = st.selectbox('Forecast Confidence Interval:', ['95%','90%', '80%'], key=8)
+        scope = st.selectbox('Market to forecast:', ['Community pharmacy', 'Hospital', 'Both'], key=6)
+        if scope == "Both":
+            scope_title = "Community & Hospital"
+        elif scope == "Community pharmacy":
+            scope_title = "Community pharmacy"
+        elif scope == "Hospital":
+            scope_title = "Hospital"
+    chart_title = "Sales Forecasting" + " - " + selection + " - " + scope_title + " market"
+
+    #  Customize the chart
+    with st.expander("Access to configuration panel"): 
+        col3, col4 = st.columns(2)  
+        with col3:
+            prediction_timeframe = st.slider('Forecasting horizon (in months):', min_value=3, value=6, max_value=12, step=1, key=7)
+        with col4:
+            confidence_interval = st.selectbox('Forecast Confidence Interval:', ['95%','90%', '80%'], key=8)
+            if confidence_interval == '95%':
+                IC_LW = 'LW_095'
+                IC_UP = 'UP_095'
+            elif confidence_interval == '90%':
+                IC_LW = 'LW_090'
+                IC_UP = 'UP_090'
+            elif confidence_interval == '80%':
+                IC_LW = 'LW_080'
+                IC_UP = 'UP_080'
     
     # Filter the dataframe
-    if scope == 'Both':
-        df = df_prod[df_prod['PRODUCT'] == selection]
-    else:
-        df = df_prod_scope[(df_prod_scope['PRODUCT'] == selection) & (df_prod_scope['SCOPE'] == scope)]
+    df_atc2 = df_atc2[df_atc2['ATC2_DESCRIPTION'] == selection]
+    df_atc2 = df_atc2[df_atc2['MARKET'] == scope]
 
-    # Chart
-    fig = px.line(predictions, x="DATE", y="VALUE", color="TYPE", color_discrete_map=color_map)
-    if method == 'Linear Regression':
-        new_trace = go.Scatter(x=curve['DATE'], y=curve['VALUE'], mode='lines', name='Regression line', line=dict(color='black', dash='dot'), opacity=0.5)
-        fig.add_trace(new_trace)
-    fig.update_layout(legend=dict(yanchor="top",y=1.0,xanchor="right",x=1.0,bgcolor="rgba(255, 255, 255, 0.5)", borderwidth=1), 
-                      xaxis_title="", yaxis_title="Sales reimbursed (M€)", title=chart_title)
+    # Draw Chart
+    # Creating the plot
+    fig = go.Figure()
+    # Add actual sales line
+    fig.add_trace(go.Scatter(x=df_atc2['TS'], y=df_atc2['ACTUAL'], mode='lines', name='Actual Sales', line=dict(color=color_map['Actual'])))
+    # Add confidence interval
+    fig.add_trace(go.Scatter(x=list(df_atc2['TS']) + list(df_atc2['TS'][::-1]), y=list(df_atc2[IC_UP]) + list(df_atc2[IC_LW][::-1]), fill='toself', fillcolor=color_map['Forecast_area'],
+        line=dict(color=color_map['Forecast_IC']), hoverinfo="skip", showlegend=False))
+    # Add forecast line
+    fig.add_trace(go.Scatter(x=df_atc2['TS'], y=df_atc2['FORECAST'], mode='lines', name='Forecast', line=dict(color=color_map['Forecast'])))
+    # Update layout
+    fig.update_layout(title=chart_title, xaxis_title='Date', yaxis_title='Sales', template='plotly_white')
     st.plotly_chart(fig, theme="streamlit", use_container_width=True)
 
-    # Raw data
-    with st.expander("Forecasting raw data"):
-        st.dataframe(predictions[predictions['TYPE']=='Forecast'][['DATE', 'VALUE']])
+    
 
-    # Explanations
-    with st.expander(expander_title):
-        st.write(expander_text)
+    # Raw data
+    with st.expander("Access to raw data"):
+        st.dataframe(df_atc2)
 
 with tab3:
    st.header("An owl")
